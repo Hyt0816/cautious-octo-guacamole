@@ -112,4 +112,3 @@ searchBtn.onclick = async function() {
         resultDiv.innerHTML = `<div class="error">${e.message || '查詢失敗'}</div>`;
     }
                 }
-
