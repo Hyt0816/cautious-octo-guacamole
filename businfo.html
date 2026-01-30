@@ -19,14 +19,12 @@
 </head>
 <body>
 	<div class="container">
-		<h1>公車到站查詢</h1>
+		<h1>大台北公車即時查詢</h1>
+		<div style="margin-bottom:1em;color:#d32f2f;font-size:1em;">請先啟動本地 Python 代理伺服器（ptx_proxy.py），否則查詢會失敗！</div>
 		<label for="city">縣市</label>
 		<select id="city">
 			<option value="Taipei">台北市</option>
 			<option value="NewTaipei">新北市</option>
-			<option value="Taichung">台中市</option>
-			<option value="Tainan">台南市</option>
-			<option value="Kaohsiung">高雄市</option>
 		</select>
 		<label for="route">公車路線</label>
 		<input type="text" id="route" placeholder="請輸入公車號碼，如 307">
@@ -34,6 +32,7 @@
 		<select id="direction"><option value="">請先查詢路線</option></select>
 		<button id="search">查詢到站資訊</button>
 		<div id="result"></div>
+		<script src="businfo.js"></script>
 	</div>
 	<script src="businfo.js"></script>
 </body>

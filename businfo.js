@@ -1,6 +1,5 @@
-// 使用 PTX 公車 API 查詢到站資訊
-// 參考 https://ptx.transportdata.tw/MOTC/
-
+// businfo.js - 修正版
+// 這裡我們改用 "本地代理伺服器" 來抓資料，而不是直接連去 TDX
 
 const cityMap = {
     Taipei: 'Taipei',
@@ -10,12 +9,10 @@ const cityMap = {
     Kaohsiung: 'Kaohsiung',
 };
 
-
 const directionSelect = document.getElementById('direction');
 const searchBtn = document.getElementById('search');
 const routeInput = document.getElementById('route');
 let stopsDataCache = [];
-
 
 routeInput.addEventListener('change', handleRouteInput);
 routeInput.addEventListener('blur', handleRouteInput);
@@ -48,12 +45,20 @@ async function loadDirections() {
         return;
     }
     try {
-        const stopsRes = await fetch(`https://ptx.transportdata.tw/MOTC/v2/Bus/DisplayStopOfRoute/City/${city}/${encodeURIComponent(route)}?format=JSON`);
+        // [修正重點 1]：網址改為連線到本地 Python Server (127.0.0.1:5000/ptx/...)
+        const url = `http://127.0.0.1:5000/ptx/Bus/DisplayStopOfRoute/City/${city}/${encodeURIComponent(route)}`;
+        
+        const stopsRes = await fetch(url);
         const stopsData = await stopsRes.json();
+        
+        // 錯誤處理：如果後端回傳錯誤訊息
+        if (stopsData.error) throw new Error(stopsData.error);
         if (!stopsData.length) throw new Error('查無此路線');
+        
         stopsDataCache = stopsData;
         directionSelect.innerHTML = stopsData.map((d, i) => `<option value="${i}">${d.Direction === 0 ? '去程' : d.Direction === 1 ? '返程' : '其他'}：${d.Stops[0].StopName.Zh_tw} → ${d.Stops[d.Stops.length-1].StopName.Zh_tw}</option>`).join('');
     } catch (e) {
+        console.error(e);
         directionSelect.innerHTML = `<option value="">${e.message || '查詢失敗'}</option>`;
     }
 }
@@ -64,6 +69,7 @@ searchBtn.onclick = async function() {
     const resultDiv = document.getElementById('result');
     const dirIdx = parseInt(directionSelect.value, 10);
     resultDiv.innerHTML = '';
+    
     if (!route) {
         resultDiv.innerHTML = '<div class="error">請輸入公車號碼</div>';
         return;
@@ -72,28 +78,43 @@ searchBtn.onclick = async function() {
         resultDiv.innerHTML = '<div class="error">請先查詢並選擇方向</div>';
         return;
     }
+    
     resultDiv.textContent = '查詢中...';
     try {
-        // 查詢到站預估
-        const estRes = await fetch(`https://ptx.transportdata.tw/MOTC/v2/Bus/EstimatedTimeOfArrival/City/${city}/${encodeURIComponent(route)}?format=JSON`);
+        // [修正重點 2]：網址改為連線到本地 Python Server
+        const url = `http://127.0.0.1:5000/ptx/Bus/EstimatedTimeOfArrival/City/${city}/${encodeURIComponent(route)}`;
+
+        const estRes = await fetch(url);
         const estData = await estRes.json();
+
+        if (estData.error) throw new Error(estData.error);
+
         // 整理資料
         let html = '';
         const stops = stopsDataCache[dirIdx].Stops;
         stops.forEach(stop => {
+            // 比對到站資料
             const est = estData.find(e => e.StopUID === stop.StopUID && e.Direction == stopsDataCache[dirIdx].Direction);
             let status = '無資料';
+            let statusColor = '#666';
+
             if (est) {
-                if (est.StopStatus === 0) {
+                if (est.StopStatus === 0) { // 正常營運
                     if (est.EstimateTime != null) {
                         const min = Math.floor(est.EstimateTime/60);
-                        if (est.EstimateTime <= 180) {
-                            status = `<span style='color:#d32f2f;font-weight:bold'>即將到站 (${min} 分鐘)</span>`;
+                        if (est.EstimateTime <= 60) {
+                            status = `<b>即將進站</b>`;
+                            statusColor = 'red';
+                        } else if (est.EstimateTime <= 180) {
+                            status = `<b>約 ${min} 分</b>`;
+                            statusColor = '#d32f2f';
                         } else {
-                            status = min + ' 分鐘';
+                            status = `${min} 分`;
+                            statusColor = 'black';
                         }
                     } else {
                         status = '進站中';
+                        statusColor = 'red';
                     }
                 } else if (est.StopStatus === 1) {
                     status = '尚未發車';
@@ -105,10 +126,14 @@ searchBtn.onclick = async function() {
                     status = '今日未營運';
                 }
             }
-            html += `<div class="bus-item"><b>${stop.StopName.Zh_tw}</b>：${status}</div>`;
+            html += `<div class="bus-item">
+                        <span style="display:inline-block; width:180px;">${stop.StopName.Zh_tw}</span>
+                        <span style="color:${statusColor}">${status}</span>
+                     </div>`;
         });
         resultDiv.innerHTML = html;
     } catch (e) {
+        console.error(e);
         resultDiv.innerHTML = `<div class="error">${e.message || '查詢失敗'}</div>`;
     }
-                }
+}
